@@ -8,6 +8,7 @@ import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 
 import java.util.Collection;
 
@@ -30,34 +31,36 @@ public class EpisodeApplicationService {
      *
      * @param scheduleEpisodeCommand The details of the episode to schedule.
      */
+    @Transactional
     public EpisodeDTO scheduleEpisode(ScheduleEpisodeCommand scheduleEpisodeCommand) {
         Log.debugf("Received ScheduleEpisodeCommand: %s", scheduleEpisodeCommand);
         // validate that the title does not already exist in the database
-        if(episodeRepository.titleIsUnique(scheduleEpisodeCommand.title())){
+        if(!episodeRepository.titleIsUnique(scheduleEpisodeCommand.title())) {
+            throw new IllegalArgumentException("Episode title must be unique");
+        }
 
-            // Create an Episode
-            EpisodeAggregate episodeAggregate = EpisodeAggregate.createAndSchedule(
-                    scheduleEpisodeCommand.title(),
-                    scheduleEpisodeCommand.description(),
-                    scheduleEpisodeCommand.airDate()
-            );
+        // Create an Episode
+        EpisodeAggregate episodeAggregate = EpisodeAggregate.createAndSchedule(
+                scheduleEpisodeCommand.title(),
+                scheduleEpisodeCommand.description(),
+                scheduleEpisodeCommand.airDate()
+        );
 
-            Collection<DomainEvent> events = episodeAggregate.getDomainEvents();
+        Collection<DomainEvent> events = episodeAggregate.getDomainEvents();
 
-            // Persist the data
-            episodeRepository.persist(episodeAggregate);
-            Log.debugf("Persisted episode: %s", episodeAggregate.getTitle().value());
+        // Persist the data
+        episodeRepository.persist(episodeAggregate);
+        Log.debugf("Persisted episode: %s", episodeAggregate.getTitle().value());
 
-            // Notify the rest of the system
-            events.forEach(event -> {
-                eventPublisher.fire(event);
-                Log.debugf("Notified rest of system about event: %s", event);
-            });
-            return new EpisodeDTO(
-                    episodeAggregate.getTitle().value(),
-                    episodeAggregate.getDescription(),
-                    episodeAggregate.getAirDate().value()
-            );
-        };
+        // Notify the rest of the system
+        events.forEach(event -> {
+            eventPublisher.fire(event);
+            Log.debugf("Notified rest of system about event: %s", event);
+        });
+        return new EpisodeDTO(
+                episodeAggregate.getTitle().value(),
+                episodeAggregate.getDescription(),
+                episodeAggregate.getAirDate().value()
+        );
     }
 }

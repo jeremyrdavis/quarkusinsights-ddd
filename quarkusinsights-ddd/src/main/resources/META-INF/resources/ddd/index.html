@@ -11,7 +11,7 @@
     form { padding: 1rem; background: #f8f8f8; border-radius: 5px; }
     label { display: block; margin: 0.75rem 0 0.25rem; font-weight: 600; font-size: 0.9rem; }
     .hint { display: block; color: #666; font-size: 0.8rem; font-weight: 400; margin-top: -0.15rem; margin-bottom: 0.25rem; }
-    input[type=text], input[type=email], textarea {
+    input[type=text], input[type=email], input[type=date], textarea {
       font-family: inherit; font-size: 1rem; padding: 0.4rem; width: 100%; box-sizing: border-box;
       border: 1px solid #ccc; border-radius: 3px;
     }
@@ -51,6 +51,9 @@
 
     <label for="description">Episode description</label>
     <textarea id="description" name="description" required></textarea>
+
+    <label for="air-date">Air date</label>
+    <input type="date" id="air-date" name="localDate" required>
 
     <label>Hosts</label>
     <span class="hint">Each host has a name and an email. Click "+ Add host" to enter more than one.</span>
@@ -152,6 +155,7 @@
             elt._payload = {
               title: document.getElementById('title').value,
               description: document.getElementById('description').value,
+              localDate: document.getElementById('air-date').value,
               hosts: collectPeople('hosts-rows'),
               guests: collectPeople('presenters-rows')
             };

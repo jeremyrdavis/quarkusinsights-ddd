@@ -5,6 +5,7 @@ import io.arrogantprogrammer.quarkusinsights.ddd.programming.events.EpisodeSched
 import io.quarkus.logging.Log;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collection;
 
 public class EpisodeAggregate {
@@ -31,6 +32,9 @@ public class EpisodeAggregate {
                 episodeAggregate.description,
                 episodeAggregate.airDate
         );
+        if(episodeAggregate.domainEvents == null) {
+            episodeAggregate.domainEvents = new ArrayList<>();
+        }
         episodeAggregate.domainEvents.add(episodeScheduledEvent);
         return episodeAggregate;
     }

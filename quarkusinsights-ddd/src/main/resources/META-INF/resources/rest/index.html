@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>New Episode · Quarkus Insights</title>
+  <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+    h1 { margin-bottom: 0.25rem; }
+    .meta { color: #666; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    form { padding: 1rem; background: #f8f8f8; border-radius: 5px; }
+    label { display: block; margin: 0.75rem 0 0.25rem; font-weight: 600; font-size: 0.9rem; }
+    .hint { display: block; color: #666; font-size: 0.8rem; font-weight: 400; margin-top: -0.15rem; margin-bottom: 0.25rem; }
+    input[type=text], input[type=email], textarea {
+      font-family: inherit; font-size: 1rem; padding: 0.4rem; width: 100%; box-sizing: border-box;
+      border: 1px solid #ccc; border-radius: 3px;
+    }
+    textarea { min-height: 6rem; }
+    button { font-family: inherit; padding: 0.5rem 1rem; background: #226; color: #fff; border: none; border-radius: 3px; cursor: pointer; }
+    button:hover { background: #114; }
+    button.add-row {
+      margin-top: 0.5rem; padding: 0.25rem 0.75rem; background: #fff; color: #226;
+      border: 1px solid #226; font-weight: 700;
+    }
+    button.add-row:hover { background: #226; color: #fff; }
+    button.remove-row {
+      padding: 0.4rem 0.6rem; background: transparent; color: #844;
+      border: 1px solid #ccc; font-weight: 700;
+    }
+    button.remove-row:hover { background: #844; color: #fff; border-color: #844; }
+    .person-row {
+      display: grid; grid-template-columns: 1fr 1fr auto;
+      gap: 0.5rem; align-items: center; margin-bottom: 0.5rem;
+    }
+    #result { margin-top: 1rem; padding: 0.75rem; background: #efe; color: #262; border-radius: 3px; min-height: 1rem; }
+    #result:empty { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Create an Episode</h1>
+  <p class="meta">POSTs to <code>/episodes</code> via HTMX (JSON-encoded). The endpoint detects <code>HX-Request</code> and returns an HTML fragment, swapped into the result panel below.</p>
+
+  <form id="create-episode-form"
+        hx-post="/episodes"
+        hx-ext="episode-json"
+        hx-target="#result"
+        hx-swap="innerHTML">
+
+    <label for="title">Episode title</label>
+    <input type="text" id="title" name="title" required maxlength="200">
+
+    <label for="description">Episode description</label>
+    <textarea id="description" name="description" required></textarea>
+
+    <label>Hosts</label>
+    <span class="hint">Each host has a name and an email. Click "+ Add host" to enter more than one.</span>
+    <div id="hosts-rows" class="person-rows" data-role="host"></div>
+    <button type="button" class="add-row" data-target="hosts-rows" data-label="host">+ Add host</button>
+
+    <label>Presenters</label>
+    <span class="hint">Each presenter has a name and an email. Click "+ Add presenter" to enter more than one. Stored under the Episode's <code>guests</code> collection (the entity's name for the second cast list).</span>
+    <div id="presenters-rows" class="person-rows" data-role="presenter"></div>
+    <button type="button" class="add-row" data-target="presenters-rows" data-label="presenter">+ Add presenter</button>
+
+    <div style="margin-top: 1rem;">
+      <button type="submit">Create episode</button>
+    </div>
+  </form>
+
+  <div id="result" aria-live="polite"></div>
+
+  <script>
+    // Build a single name+email row for a given role label ("host" or
+    // "presenter"). Uses safe DOM construction so role/label strings
+    // are never injected as HTML.
+    function buildPersonRow(label) {
+      var row = document.createElement('div');
+      row.className = 'person-row';
+
+      var nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.className = 'person-name';
+      nameInput.placeholder = label + ' name';
+      nameInput.required = true;
+
+      var emailInput = document.createElement('input');
+      emailInput.type = 'email';
+      emailInput.className = 'person-email';
+      emailInput.placeholder = label + ' email';
+      emailInput.required = true;
+
+      var removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'remove-row';
+      removeBtn.textContent = '−';
+      removeBtn.title = 'Remove this ' + label;
+      removeBtn.addEventListener('click', function() {
+        var container = row.parentNode;
+        row.remove();
+        // Always keep at least one row so the user has somewhere to type.
+        if (container && container.children.length === 0) {
+          container.appendChild(buildPersonRow(label));
+        }
+      });
+
+      row.appendChild(nameInput);
+      row.appendChild(emailInput);
+      row.appendChild(removeBtn);
+      return row;
+    }
+
+    // Seed each container with one starting row.
+    document.querySelectorAll('.person-rows').forEach(function(container) {
+      var label = container.dataset.role;
+      container.appendChild(buildPersonRow(label));
+    });
+
+    // Wire the "+" buttons.
+    document.querySelectorAll('.add-row').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var container = document.getElementById(btn.dataset.target);
+        container.appendChild(buildPersonRow(btn.dataset.label));
+      });
+    });
+
+    // Collect non-empty rows from a container into an array of person
+    // objects matching the Person entity ({name, email}).
+    function collectPeople(containerId) {
+      var rows = document.querySelectorAll('#' + containerId + ' .person-row');
+      var out = [];
+      rows.forEach(function(row) {
+        var name = row.querySelector('.person-name').value.trim();
+        var email = row.querySelector('.person-email').value.trim();
+        if (!name && !email) return;
+        out.push({ name: name, email: email });
+      });
+      return out;
+    }
+
+    // Custom HTMX encoder. The stock htmx-ext-json-enc flattens
+    // parameters via FormData iteration, which calls toString() on
+    // every value — nested objects become "[object Object]" strings.
+    // This extension instead stashes a fully-typed payload on the form
+    // element and JSON.stringify's it directly, preserving the
+    // [{name, email}] structure the EpisodeResource expects.
+    htmx.defineExtension('episode-json', {
+      onEvent: function(name, evt) {
+        if (name === 'htmx:configRequest') {
+          evt.detail.headers['Content-Type'] = 'application/json';
+          var elt = evt.detail.elt;
+          if (elt && elt.id === 'create-episode-form') {
+            elt._payload = {
+              title: document.getElementById('title').value,
+              description: document.getElementById('description').value,
+              hosts: collectPeople('hosts-rows'),
+              guests: collectPeople('presenters-rows')
+            };
+          }
+        }
+      },
+      encodeParameters: function(xhr, parameters, elt) {
+        xhr.overrideMimeType('text/json');
+        return JSON.stringify(elt._payload || {});
+      }
+    });
+  </script>
+</body>
+</html>
